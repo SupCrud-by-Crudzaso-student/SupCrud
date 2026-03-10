@@ -2,7 +2,7 @@ import { getState } from "../../store/store.js";
 import { navigate } from "../../router/router.js";
 import { renderSidebar, setupLogout } from "../../components/sidebar.js";
 import { mockTickets, mockMembers } from "../../mocks/data.js";
-import { statusBadge, priorityBadge, typeBadge, formatDate, paginate, paginationHTML, openModal, closeModal, avatarHTML } from "../../components/helpers.js";
+import { statusBadge, priorityBadge, typeBadge, formatDate, paginate, paginationHTML, avatarHTML } from "../../components/helpers.js";
 import { toast } from "../../components/toast.js";
 
 const PAGE_SIZE = 8;
@@ -14,17 +14,47 @@ export function renderTickets(container) {
   setupLogout();
 
   let currentPage = 1;
-  let filters = { status: "", type: "", priority: "", agent: "" };
+  let filters = { status: "", type: "", priority: "", agent: "", search: "" };
 
   function getFiltered() {
+    const q = filters.search.toLowerCase().trim();
     return mockTickets.filter(t => {
       if (t.workspaceId !== activeWorkspace?.id) return false;
       if (filters.status   && t.status   !== filters.status)   return false;
       if (filters.type     && t.type     !== filters.type)     return false;
       if (filters.priority && t.priority !== filters.priority) return false;
       if (filters.agent    && t.assignedAgentId !== filters.agent) return false;
+      if (q && !t.subject.toLowerCase().includes(q)
+            && !t.referenceCode.toLowerCase().includes(q)
+            && !(t.email || "").toLowerCase().includes(q)) return false;
       return true;
     });
+  }
+
+  function exportCSV(tickets) {
+    const headers = ["Código", "Asunto", "Tipo", "Estado", "Prioridad", "Agente", "Email", "Creado"];
+    const typeMap = { P: "Petición", Q: "Queja", R: "Reclamo", S: "Sugerencia" };
+    const statusMap = { OPEN: "Abierto", IN_PROGRESS: "En progreso", RESOLVED: "Resuelto", CLOSED: "Cerrado", REOPENED: "Reabierto" };
+    const priorityMap = { LOW: "Baja", MEDIUM: "Media", HIGH: "Alta", URGENT: "Urgente" };
+    const rows = tickets.map(t => [
+      t.referenceCode,
+      `"${t.subject.replace(/"/g, '""')}"`,
+      typeMap[t.type] || t.type,
+      statusMap[t.status] || t.status,
+      priorityMap[t.priority] || t.priority,
+      t.assignedAgent || "Sin asignar",
+      t.email || "",
+      new Date(t.createdAt).toLocaleDateString("es-CO"),
+    ]);
+    const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `tickets-${activeWorkspace?.workspaceKey || "export"}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("CSV exportado correctamente");
   }
 
   function render() {
@@ -38,7 +68,7 @@ export function renderTickets(container) {
           <header class="topbar">
             <span class="topbar-title">Tickets</span>
             <div class="topbar-actions">
-              <button class="btn btn-primary btn-sm" id="btn-new-ticket">+ Nuevo ticket</button>
+              <button class="btn btn-outline btn-sm" id="btn-export-csv">&#8595; Exportar CSV</button>
             </div>
           </header>
           <div class="page-body">
@@ -48,8 +78,13 @@ export function renderTickets(container) {
               ${quickStats(mockTickets.filter(t => t.workspaceId === activeWorkspace?.id))}
             </div>
 
-            <!-- Filtros -->
+            <!-- Búsqueda + Filtros -->
             <div class="card" style="margin-bottom:1rem;padding:1rem">
+              <div style="margin-bottom:.75rem">
+                <input class="form-control" type="text" id="f-search"
+                  placeholder="Buscar por asunto, código o email..."
+                  value="${filters.search}" />
+              </div>
               <div class="filters-bar">
                 <select class="form-control form-select" id="f-status">
                   <option value="">Todos los estados</option>
@@ -79,6 +114,11 @@ export function renderTickets(container) {
                 </select>
                 <button class="btn btn-ghost btn-sm" id="btn-clear-filters">Limpiar</button>
               </div>
+            </div>
+
+            <!-- Conteo de resultados -->
+            <div style="margin-bottom:.5rem;font-size:.83rem;color:#64748b">
+              Mostrando <strong>${filtered.length}</strong> ticket${filtered.length !== 1 ? "s" : ""}
             </div>
 
             <!-- Tabla -->
@@ -137,10 +177,20 @@ export function renderTickets(container) {
 
     window._goPage = (p) => { currentPage = p; render(); };
 
-    document.getElementById("btn-new-ticket")?.addEventListener("click", () => openNewTicketModal());
+    document.getElementById("btn-export-csv")?.addEventListener("click", () => exportCSV(getFiltered()));
   }
 
   function bindFilters() {
+    // Búsqueda en tiempo real
+    const searchEl = document.getElementById("f-search");
+    if (searchEl) {
+      searchEl.addEventListener("input", () => {
+        filters.search = searchEl.value;
+        currentPage = 1;
+        render();
+      });
+    }
+
     const setFilter = (id, key) => {
       const el = document.getElementById(id);
       if (el) {
@@ -153,7 +203,7 @@ export function renderTickets(container) {
     setFilter("f-priority", "priority");
     setFilter("f-agent",    "agent");
     document.getElementById("btn-clear-filters")?.addEventListener("click", () => {
-      filters = { status: "", type: "", priority: "", agent: "" };
+      filters = { status: "", type: "", priority: "", agent: "", search: "" };
       currentPage = 1;
       render();
     });
@@ -172,60 +222,4 @@ function quickStats(tickets) {
     <div class="stat-card"><div class="stat-icon orange"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><div><div class="stat-label">En progreso</div><div class="stat-value">${inProgress}</div></div></div>
     <div class="stat-card"><div class="stat-icon green"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></div><div><div class="stat-label">Resueltos</div><div class="stat-value">${resolved}</div></div></div>
   `;
-}
-
-function openNewTicketModal() {
-  const overlay = openModal(`
-    <div class="modal-header">
-      <span class="modal-title">Crear nuevo ticket</span>
-      <button class="modal-close" onclick="document.querySelector('.modal-overlay').remove()">×</button>
-    </div>
-    <form id="new-ticket-form">
-      <div class="auth-form" style="gap:.9rem">
-        <div class="form-group">
-          <label class="form-label">Correo del cliente</label>
-          <input class="form-control" type="email" id="nt-email" placeholder="cliente@email.com" required />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Asunto</label>
-          <input class="form-control" type="text" id="nt-subject" placeholder="Describe brevemente el problema" required />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Descripción</label>
-          <textarea class="form-control" id="nt-desc" rows="3" placeholder="Detalla la situación..."></textarea>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem">
-          <div class="form-group">
-            <label class="form-label">Tipo</label>
-            <select class="form-control form-select" id="nt-type">
-              <option value="P">Petición</option>
-              <option value="Q">Queja</option>
-              <option value="R">Reclamo</option>
-              <option value="S">Sugerencia</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Prioridad</label>
-            <select class="form-control form-select" id="nt-priority">
-              <option value="LOW">Baja</option>
-              <option value="MEDIUM" selected>Media</option>
-              <option value="HIGH">Alta</option>
-              <option value="URGENT">Urgente</option>
-            </select>
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-outline" onclick="document.querySelector('.modal-overlay').remove()">Cancelar</button>
-        <button type="submit" class="btn btn-primary">Crear ticket</button>
-      </div>
-    </form>
-  `);
-
-  overlay.querySelector("#new-ticket-form").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const code = "SUP-" + Date.now();
-    toast.success(`Ticket ${code} creado exitosamente`);
-    overlay.remove();
-  });
 }

@@ -1,7 +1,7 @@
 import { getState } from "../../store/store.js";
 import { navigate } from "../../router/router.js";
 import { renderSidebar, setupLogout } from "../../components/sidebar.js";
-import { mockTickets, mockMessages, mockEvents, mockMembers } from "../../mocks/data.js";
+import { mockTickets, mockMessages, mockEvents, mockMembers, saveData } from "../../mocks/data.js";
 import { statusBadge, priorityBadge, typeBadge, formatDate, formatDateTime, avatarHTML } from "../../components/helpers.js";
 import { toast } from "../../components/toast.js";
 
@@ -29,6 +29,7 @@ export function renderTicketDetail(container, { ticketId }) {
             <span class="topbar-title" style="font-size:.95rem">${ticket.referenceCode} — ${ticket.subject}</span>
             <div class="topbar-actions">
               ${statusBadge(ticket.status)}
+              <button class="btn btn-danger btn-sm" id="btn-delete-ticket">Eliminar</button>
             </div>
           </header>
           <div class="page-body">
@@ -147,19 +148,68 @@ export function renderTicketDetail(container, { ticketId }) {
     document.getElementById("btn-reply")?.addEventListener("click", () => {
       const input = document.getElementById("reply-input");
       if (!input.value.trim()) return;
+      const { user } = getState();
+      const newMsg = {
+        id: "msg" + Date.now(),
+        content: input.value.trim(),
+        authorEmail: user?.email || "",
+        authorName: user?.name || "Agente",
+        isAgent: true,
+        createdAt: new Date().toISOString(),
+      };
+      if (!mockMessages[ticketId]) mockMessages[ticketId] = [];
+      mockMessages[ticketId].push(newMsg);
+      ticket.updatedAt = new Date().toISOString();
+      saveData();
       toast.success("Respuesta enviada");
       input.value = "";
+      render();
     });
 
     document.getElementById("btn-update-status")?.addEventListener("click", () => {
-      const status = document.getElementById("sel-status").value;
-      toast.success(`Estado actualizado a: ${status}`);
+      const newStatus = document.getElementById("sel-status").value;
+      const statusLabels = { OPEN:"Abierto", IN_PROGRESS:"En progreso", RESOLVED:"Resuelto", CLOSED:"Cerrado", REOPENED:"Reabierto" };
+      ticket.status = newStatus;
+      ticket.updatedAt = new Date().toISOString();
+      mockEvents[ticketId] = mockEvents[ticketId] || [];
+      mockEvents[ticketId].push({
+        id: "e" + Date.now(),
+        type: "STATUS_CHANGED",
+        description: `Estado cambiado a ${statusLabels[newStatus] || newStatus}`,
+        performedBy: getState().user?.name,
+        createdAt: new Date().toISOString(),
+      });
+      saveData();
+      toast.success(`Estado actualizado a: ${statusLabels[newStatus]}`);
+      render();
     });
 
     document.getElementById("btn-assign")?.addEventListener("click", () => {
       const agentId = document.getElementById("sel-agent").value;
       const agent = mockMembers.find(m => m.userId === agentId);
+      ticket.assignedAgentId = agentId || null;
+      ticket.assignedAgent = agent?.name || null;
+      ticket.updatedAt = new Date().toISOString();
+      mockEvents[ticketId] = mockEvents[ticketId] || [];
+      mockEvents[ticketId].push({
+        id: "e" + Date.now(),
+        type: "ASSIGNED",
+        description: agent ? `Asignado a ${agent.name}` : "Asignación removida",
+        performedBy: getState().user?.name,
+        createdAt: new Date().toISOString(),
+      });
+      saveData();
       toast.success(agent ? `Ticket asignado a ${agent.name}` : "Asignación removida");
+      render();
+    });
+
+    document.getElementById("btn-delete-ticket")?.addEventListener("click", () => {
+      if (!confirm(`¿Eliminar el ticket ${ticket.referenceCode}? Esta acción no se puede deshacer.`)) return;
+      const idx = mockTickets.findIndex(t => t.id === ticketId);
+      if (idx !== -1) mockTickets.splice(idx, 1);
+      saveData();
+      toast.success(`Ticket ${ticket.referenceCode} eliminado`);
+      navigate(`/workspace/${activeWorkspace?.workspaceKey}`);
     });
   }
 

@@ -1,5 +1,11 @@
+import { mockTickets, saveData } from "../mocks/data.js";
+
 export function renderLanding(container) {
-  container.innerHTML = `
+  let submitted = false;
+  let refCode = "";
+
+  function render() {
+    container.innerHTML = `
     <div class="landing">
 
       <!-- NAV -->
@@ -9,6 +15,7 @@ export function renderLanding(container) {
           <span>by Crudzaso</span>
         </div>
         <div class="landing-nav-links">
+          <a href="#submit">Enviar ticket</a>
           <a href="#/track">Consultar ticket</a>
           <a href="#features">Funcionalidades</a>
           <a href="#types">Tipos</a>
@@ -27,6 +34,7 @@ export function renderLanding(container) {
           <p>SupCrud by Crudzaso te permite integrar un sistema completo de soporte en tu negocio mediante un widget embebible, con IA, adjuntos y más.</p>
           <div class="hero-actions">
             <button class="btn btn-primary btn-lg" onclick="navigate('/login')">Comenzar ahora</button>
+            <button class="btn btn-hero-outline btn-lg" onclick="document.getElementById('submit').scrollIntoView({behavior:'smooth'})">Enviar mi PQRS</button>
             <button class="btn btn-hero-outline btn-lg" onclick="navigate('/track')">Consultar mi ticket</button>
           </div>
         </div>
@@ -86,6 +94,58 @@ export function renderLanding(container) {
         </div>
       </section>
 
+      <!-- ENVIAR TICKET -->
+      <section class="section" id="submit">
+        <div class="section-header">
+          <h2>Envía tu PQRS</h2>
+          <p>Completa el formulario y recibirás un código de seguimiento para tu solicitud.</p>
+        </div>
+        <div style="max-width:560px;margin:0 auto">
+          ${submitted ? `
+            <div class="card" style="text-align:center;padding:2.5rem">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" style="margin:0 auto 1rem"><polyline points="20 6 9 17 4 12"/></svg>
+              <h3 style="color:#16a34a;margin-bottom:.5rem">¡Ticket enviado exitosamente!</h3>
+              <p class="text-muted" style="font-size:.9rem;margin-bottom:1.2rem">Guarda tu código de referencia para hacer seguimiento.</p>
+              <div style="background:#f1f5f9;border-radius:.5rem;padding:1rem;font-size:1.1rem;font-weight:700;color:#6366f1;letter-spacing:.05em">${refCode}</div>
+              <button class="btn btn-outline btn-sm" style="margin-top:1.2rem" id="btn-new-submit">Enviar otro ticket</button>
+            </div>
+          ` : `
+            <div class="card">
+              <form id="public-ticket-form">
+                <div class="auth-form" style="gap:.9rem">
+                  <div class="form-group">
+                    <label class="form-label">Tu nombre</label>
+                    <input class="form-control" type="text" id="pt-name" placeholder="Nombre completo" required />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Correo electrónico</label>
+                    <input class="form-control" type="email" id="pt-email" placeholder="tu@correo.com" required />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Asunto</label>
+                    <input class="form-control" type="text" id="pt-subject" placeholder="Describe brevemente tu solicitud" required />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Descripción</label>
+                    <textarea class="form-control" id="pt-desc" rows="4" placeholder="Detalla tu situación con la mayor información posible..." required></textarea>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Tipo de solicitud</label>
+                    <select class="form-control form-select" id="pt-type">
+                      <option value="P">Petición — Solicitud de información o servicio</option>
+                      <option value="Q">Queja — Inconformidad con el servicio</option>
+                      <option value="R">Reclamo — Exigencia de corrección</option>
+                      <option value="S">Sugerencia — Idea de mejora</option>
+                    </select>
+                  </div>
+                  <button type="submit" class="btn btn-primary" style="width:100%">Enviar solicitud</button>
+                </div>
+              </form>
+            </div>
+          `}
+        </div>
+      </section>
+
       <!-- CTA -->
       <section class="cta-section">
         <h2>Empieza a gestionar tu soporte hoy</h2>
@@ -100,6 +160,41 @@ export function renderLanding(container) {
 
     </div>
   `;
+
+    document.getElementById("public-ticket-form")?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const now = new Date().toISOString();
+      const code = "SUP-" + Date.now();
+      const ticket = {
+        id: "t" + Date.now(),
+        referenceCode: code,
+        workspaceId: "ws1",
+        email: document.getElementById("pt-email").value,
+        subject: document.getElementById("pt-subject").value,
+        description: document.getElementById("pt-desc").value,
+        type: document.getElementById("pt-type").value,
+        priority: "MEDIUM",
+        status: "OPEN",
+        tags: [], category: "",
+        createdAt: now, updatedAt: now,
+      };
+      mockTickets.unshift(ticket);
+      saveData();
+      submitted = true;
+      refCode = code;
+      render();
+      document.getElementById("submit")?.scrollIntoView({ behavior: "smooth" });
+    });
+
+    document.getElementById("btn-new-submit")?.addEventListener("click", () => {
+      submitted = false;
+      refCode = "";
+      render();
+      document.getElementById("submit")?.scrollIntoView({ behavior: "smooth" });
+    });
+  }
+
+  render();
 }
 
 // ─── Íconos SVG ──────────────────────────────────────────────────────────────

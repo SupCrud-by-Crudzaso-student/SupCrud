@@ -1,8 +1,8 @@
 import { getState } from "../../store/store.js";
 import { navigate } from "../../router/router.js";
 import { renderSidebar, setupLogout } from "../../components/sidebar.js";
-import { mockWorkspaces, mockMetrics } from "../../mocks/data.js";
-import { workspaceStatusBadge, formatDate, openModal } from "../../components/helpers.js";
+import { mockWorkspaces, mockMetrics, saveData } from "../../mocks/data.js";
+import { workspaceStatusBadge, formatDate } from "../../components/helpers.js";
 import { toast } from "../../components/toast.js";
 
 export function renderOwner(container) {
@@ -82,6 +82,7 @@ export function renderOwner(container) {
       const ws = workspaces.find(w => w.id === id);
       if (!ws) return;
       ws.status = ws.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE";
+      saveData();
       toast.success(`Workspace ${ws.name} ${ws.status === "ACTIVE" ? "reactivado" : "suspendido"}`);
       render();
     };

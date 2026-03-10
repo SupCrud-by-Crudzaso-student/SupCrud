@@ -1,20 +1,26 @@
 import { setState, getState } from "../store/store.js";
-import { mockWorkspaces } from "../mocks/data.js";
+import { mockAuthUsers, mockWorkspaces, saveData } from "../mocks/data.js";
 import { toast } from "../components/toast.js";
 import { navigate } from "../router/router.js";
-
-// Usuarios mock para simular auth
-const MOCK_USERS = [
-  { id: "owner1", name: "Dev Crudzaso", email: "dev@crudzaso.com", password: "admin123", role: "OWNER", workspaces: [] },
-  { id: "u1", name: "Carlos Perez",  email: "carlos@empresa.com", password: "admin123", role: "ADMIN", workspaces: ["ws1", "ws2"] },
-  { id: "u2", name: "Maria Lopez",   email: "maria@empresa.com",  password: "agent123", role: "AGENT", workspaces: ["ws1"] },
-];
 
 export function renderLogin(container) {
   const { user } = getState();
   if (user) { redirectAuthed(); return; }
 
-  container.innerHTML = `
+  const isRegister = window.location.hash === "#/register";
+
+  container.innerHTML = isRegister ? renderRegisterHTML() : renderLoginHTML();
+
+  if (isRegister) {
+    document.getElementById("register-form").addEventListener("submit", handleRegister);
+  } else {
+    document.getElementById("login-form").addEventListener("submit", handleLogin);
+    document.getElementById("btn-google").addEventListener("click", handleGoogleMock);
+  }
+}
+
+function renderLoginHTML() {
+  return `
     <div class="auth-page">
       <div class="auth-card">
         <div class="auth-logo">
@@ -66,9 +72,101 @@ export function renderLogin(container) {
       </div>
     </div>
   `;
+}
 
-  document.getElementById("login-form").addEventListener("submit", handleLogin);
-  document.getElementById("btn-google").addEventListener("click", handleGoogleMock);
+function renderRegisterHTML() {
+  return `
+    <div class="auth-page">
+      <div class="auth-card">
+        <div class="auth-logo">
+          <h1>SupCrud</h1>
+          <p>by Crudzaso — Crea tu cuenta gratis</p>
+        </div>
+
+        <form class="auth-form" id="register-form">
+          <div class="form-group">
+            <label class="form-label">Nombre completo</label>
+            <input class="form-control" type="text" id="reg-name" placeholder="Tu nombre" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Correo electrónico</label>
+            <input class="form-control" type="email" id="reg-email" placeholder="correo@empresa.com" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Nombre del workspace</label>
+            <input class="form-control" type="text" id="reg-workspace" placeholder="Mi Empresa" required />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Contraseña</label>
+            <input class="form-control" type="password" id="reg-password" placeholder="Mínimo 6 caracteres" required minlength="6" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Confirmar contraseña</label>
+            <input class="form-control" type="password" id="reg-password2" placeholder="Repite tu contraseña" required />
+          </div>
+          <span id="reg-error" class="form-error hidden"></span>
+          <button type="submit" class="btn btn-primary w-full" style="justify-content:center">
+            Crear cuenta
+          </button>
+        </form>
+
+        <p class="auth-footer" style="margin-top:1rem">
+          ¿Ya tienes cuenta?
+          <a href="#" onclick="navigate('/login')">Inicia sesión</a>
+        </p>
+        <p class="auth-footer" style="margin-top:.3rem">
+          <a href="#" onclick="navigate('/')">← Volver al inicio</a>
+        </p>
+      </div>
+    </div>
+  `;
+}
+
+function handleRegister(e) {
+  e.preventDefault();
+  const name      = document.getElementById("reg-name").value.trim();
+  const email     = document.getElementById("reg-email").value.trim().toLowerCase();
+  const wsName    = document.getElementById("reg-workspace").value.trim();
+  const password  = document.getElementById("reg-password").value;
+  const password2 = document.getElementById("reg-password2").value;
+  const errorEl   = document.getElementById("reg-error");
+
+  const showError = (msg) => {
+    errorEl.textContent = msg;
+    errorEl.classList.remove("hidden");
+  };
+
+  if (password !== password2) { showError("Las contraseñas no coinciden."); return; }
+  if (mockAuthUsers.find(u => u.email === email)) { showError("Ya existe una cuenta con ese correo."); return; }
+
+  errorEl.classList.add("hidden");
+
+  // Crear nuevo workspace
+  const wsKey = wsName.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+  const newWorkspace = {
+    id: "ws" + Date.now(),
+    workspaceKey: wsKey + "-" + Date.now().toString().slice(-4),
+    name: wsName,
+    status: "ACTIVE",
+    createdAt: new Date().toISOString().split("T")[0],
+    addons: [],
+  };
+  mockWorkspaces.push(newWorkspace);
+
+  // Crear nuevo usuario
+  const newUser = {
+    id: "u" + Date.now(),
+    name,
+    email,
+    password,
+    role: "ADMIN",
+    workspaces: [newWorkspace.id],
+  };
+  mockAuthUsers.push(newUser);
+  saveData();
+
+  toast.success(`¡Cuenta creada! Bienvenido, ${name}`);
+  loginUser(newUser);
 }
 
 function handleLogin(e) {
@@ -77,7 +175,7 @@ function handleLogin(e) {
   const password = document.getElementById("login-password").value;
   const errorEl  = document.getElementById("login-error");
 
-  const found = MOCK_USERS.find(u => u.email === email && u.password === password);
+  const found = mockAuthUsers.find(u => u.email === email && u.password === password);
 
   if (!found) {
     errorEl.textContent = "Correo o contraseña incorrectos.";
@@ -91,7 +189,7 @@ function handleLogin(e) {
 
 function handleGoogleMock() {
   // Simula login con Google como ADMIN
-  const user = MOCK_USERS[1];
+  const user = mockAuthUsers[1];
   toast.info("Simulando login con Google...");
   setTimeout(() => loginUser(user), 800);
 }

@@ -1,11 +1,13 @@
 import { getState, setState } from "../store/store.js";
 import { navigate } from "../router/router.js";
 import { avatarHTML } from "../components/helpers.js";
+import { setupLogout } from "../components/sidebar.js";
 
 export function renderSelectWorkspace(container) {
   const { user, workspaces } = getState();
 
   if (!user) { navigate("/login"); return; }
+  setupLogout();
   if (!workspaces || workspaces.length === 0) {
     navigate("/login");
     return;
